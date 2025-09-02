@@ -1,0 +1,1 @@
+# repo-starter-with-protection-rules

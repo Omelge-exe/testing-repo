@@ -1,0 +1,48 @@
+name: Apply Branch Protection
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply-branch-protection:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+      administration: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read branch protection rules
+        id: read_rules
+        run: |
+          rules=$(cat .github/branch-protection-rules.json)
+          echo "::set-output name=json::$rules"
+
+      - name: Apply branch protection
+        run: |
+          echo "${{ steps.read_rules.outputs.json }}" > temp-rules.json
+          # Example applying rules via gh CLI (replace this with your implementation)
+          # Iterate over branches defined in the JSON
+          for branch in $(jq -r 'keys[]' temp-rules.json); do
+            rules=$(jq -r ".\"$branch\"" temp-rules.json)
+            echo "Applying protection for branch: $branch"
+            gh api -X PUT \
+              -H "Accept: application/vnd.github+json" \
+              /repos/${{ github.repository }}/branches/$branch/protection \
+              -f required_status_checks="$(echo $rules | jq -c '.required_status_checks')" \
+              -f enforce_admins="$(echo $rules | jq -c '.enforce_admins')" \
+              -f required_pull_request_reviews="$(echo $rules | jq -c '.required_pull_request_reviews')" \
+              -f restrictions="$(echo $rules | jq -c '.restrictions')"
+          done
+
+      - name: Delete branch protection rules file
+        run: |
+          git rm -f .github/branch-protection-rules.json
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git commit -m "Remove branch protection rules JSON after applying"
+          git push
